@@ -233,6 +233,7 @@ TABOO_SET = set()
 def to_expr_key(expr):
     return str(sp.simplify(expr.symbol))
 
+
 def known_identity_penalty(expression):
     return to_expr_key(expression) in TABOO_SET
 
@@ -244,11 +245,28 @@ def term_count_bonus(expr):
     return 1 if 2 <= len(expr.terms) <= 3 else 0
 
 known_exprs = [
-    alpha_expr,
-    Expression([(NA, -1)]),
-    Expression([(Λ, -1)]),  # A previous version of the genalg converged to this, very cool but we should remove it
-    Expression([(H_0, -1)]),
-    Expression([(t_P, -2)]),
+    alpha_expr,                                 # fine-structure constant
+    Expression([(NA, -1)]),                     # 1 / N_A
+    Expression([(Λ, -1)]),                      # 1 / Λ
+    Expression([(H_0, -1)]),                    # 1 / H_0
+    Expression([(t_P, -2)]),                    # 1 / t_P²
+    Expression([(a_0, -1)]),                    # 1 / Bohr radius
+    Expression([(l_P, -1)]),                    # 1 / Planck length
+    Expression([(k_B, -1)]),                    # 1 / Boltzmann constant
+    Expression([(E_P, -1)]),                    # 1 / Planck energy
+    Expression([(R, -1)]),                      # 1 / gas constant
+    Expression([(m_P, -1)]),                    # 1 / Planck mass
+    Expression([(m_e, -1)]),                    # 1 / electron mass
+    Expression([(m_n, -1)]),                    # 1 / neutron mass
+    Expression([(m_p, -1)]),                    # 1 / proton mass
+    Expression([(mu_0, -1)]),                   # 1 / vacuum permeability
+    Expression([(Z_0, -1)]),                    # 1 / free space impedance
+    Expression([(c, -1)]),                      # 1 / speed of light
+    Expression([(hbar, -1)]),                   # 1 / reduced Planck constant
+    Expression([(eps0, -1)]),                   # 1 / vacuum permittivity
+
+    # Composite expressions known to evaluate to ~1
+    Expression([(NA, 1), (k_B, 1), (R, -1)]),    # N_A * k_B / R
 ]
 
 def single_term_penalty(expr):
@@ -285,7 +303,7 @@ def fitness(expression, *, known_exprs=None, alpha=10, beta=1, delta=5, epsilon=
 
 
 
-def evolve(constants, *, known_exprs=None, generations=50, population_size=100, elite_fraction=0.2):
+def evolve(constants, *, known_exprs=None, generations=200, population_size=100, elite_fraction=0.2):
     known_exprs = known_exprs or []
     global TABOO_SET
     TABOO_SET = set(to_expr_key(e) for e in known_exprs)
@@ -299,7 +317,7 @@ def evolve(constants, *, known_exprs=None, generations=50, population_size=100, 
         scored.sort(key=lambda x: -x[1])
 
         if not scored:
-            print(f"⚠️ Generation {gen+1} collapsed: no valid expressions.")
+            print(f"Generation {gen+1} collapsed: no valid expressions.")
             break
 
         best_expr = scored[0][0]
@@ -349,7 +367,7 @@ try:
     if best_expr.is_dimensionless():
         print("Value:", best_expr.evaluate(VALUES))
 except AttributeError:
-    print("⚠️ No valid expression found.")
+    print("No valid expression found.")
 val = best_expr.evaluate(VALUES)
 prox = proximity_to_one(val)
 print(f"Value: {val}")
