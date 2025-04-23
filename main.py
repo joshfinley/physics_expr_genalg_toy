@@ -32,61 +32,62 @@ class Scalar:
 
 class Expression:
     def __init__(self, terms):
-        # Merge like terms by symbol
         term_map = {}
         for t, exp in terms:
-            key = t.symbol.name
+            if exp == 0:
+                continue
+            key = t.symbol
             if key in term_map:
-                term_map[key] = (t, term_map[key][1] + exp)
+                term_map[key][1] += exp
             else:
-                term_map[key] = (t, exp)
+                term_map[key] = [t, exp]
 
-        # Remove any terms with exponent 0
+        # Final clean-up of 0-exponent terms
         self.terms = [(t, e) for t, e in term_map.values() if e != 0]
+        self._symbol = None
+        self._dimension = None
 
-        # Symbolic and dimension computation
-        self.symbol = sp.Mul(*[t.symbol**exp for t, exp in self.terms])
-        self.dimension = Dimension(0, 0, 0, 0)
-        for t, exp in self.terms:
-            if isinstance(t, Constant):
-                self.dimension += t.dimension * exp
+    @property
+    def symbol(self):
+        if self._symbol is None:
+            self._symbol = sp.Mul(*[t.symbol**e for t, e in self.terms])
+        return self._symbol
+
+    @property
+    def dimension(self):
+        if self._dimension is None:
+            d = Dimension(0, 0, 0, 0)
+            for t, e in self.terms:
+                if isinstance(t, Constant):
+                    d += t.dimension * e
+            self._dimension = d
+        return self._dimension
 
     def is_dimensionless(self):
         return self.dimension.is_dimensionless()
 
     def evaluate(self, values):
-        expr = 1.0
-        for term, exp in self.terms:
-            key = term.symbol.name
-            if key in values:
-                expr *= values[key]**exp
-        return expr
+        result = 1.0
+        for t, e in self.terms:
+            val = values.get(t.symbol.name)
+            if val is None:
+                raise KeyError(f"Missing value for {t.symbol.name}")
+            result *= val**e
+        return result
 
     def mutate(self, constants, rate=0.3, max_delta=2):
-        import random
-        new_terms = self.terms.copy()
-
-        # Modify existing exponents
+        new_terms = list(self.terms)  # shallow copy
         for i in range(len(new_terms)):
             if random.random() < rate:
                 t, e = new_terms[i]
-                if random.random() < 0.5:
-                    # Apply delta
-                    e += random.choice([-1, 1]) * random.randint(1, max_delta)
-                else:
-                    # Reset exponent randomly
-                    e = random.choice([-3, -2, -1, 1, 2, 3])
+                e = e + random.randint(-max_delta, max_delta) if random.random() < 0.5 else random.choice([-3, -2, -1, 1, 2, 3])
                 new_terms[i] = (t, e)
 
-        # Remove a random term
         if len(new_terms) > 1 and random.random() < rate:
             del new_terms[random.randint(0, len(new_terms) - 1)]
 
-        # Add a random new term
         if random.random() < rate:
-            new_const = random.choice(constants)
-            new_exp = random.choice([-2, -1, 1, 2])
-            new_terms.append((new_const, new_exp))
+            new_terms.append((random.choice(constants), random.choice([-2, -1, 1, 2])))
 
         return Expression(new_terms)
 
@@ -203,9 +204,8 @@ def generate_random_expression(constants, max_terms=4):
     return Expression(terms)
 
 def crossover(expr1, expr2):
-    half1 = expr1.terms[:len(expr1.terms)//2]
-    half2 = expr2.terms[len(expr2.terms)//2:]
-    return Expression(half1 + half2)
+    return Expression(expr1.terms[:len(expr1.terms)//2] + expr2.terms[len(expr2.terms)//2:])
+
 
 
 def is_simple(expression):
@@ -233,6 +233,7 @@ TABOO_SET = set()
 def to_expr_key(expr):
     return str(sp.simplify(expr.symbol))
 
+
 def known_identity_penalty(expression):
     return to_expr_key(expression) in TABOO_SET
 
@@ -244,18 +245,37 @@ def term_count_bonus(expr):
     return 1 if 2 <= len(expr.terms) <= 3 else 0
 
 known_exprs = [
-    alpha_expr,
-    Expression([(NA, -1)]),
-    Expression([(Λ, -1)]),  # A previous version of the genalg converged to this, very cool but we should remove it
-    Expression([(H_0, -1)]),
-    Expression([(t_P, -2)]),
+    alpha_expr,                                 # fine-structure constant
+    Expression([(NA, -1)]),                     # 1 / N_A
+    Expression([(Λ, -1)]),                      # 1 / Λ
+    Expression([(H_0, -1)]),                    # 1 / H_0
+    Expression([(t_P, -2)]),                    # 1 / t_P²
+    Expression([(a_0, -1)]),                    # 1 / Bohr radius
+    Expression([(l_P, -1)]),                    # 1 / Planck length
+    Expression([(k_B, -1)]),                    # 1 / Boltzmann constant
+    Expression([(E_P, -1)]),                    # 1 / Planck energy
+    Expression([(R, -1)]),                      # 1 / gas constant
+    Expression([(m_P, -1)]),                    # 1 / Planck mass
+    Expression([(m_e, -1)]),                    # 1 / electron mass
+    Expression([(m_n, -1)]),                    # 1 / neutron mass
+    Expression([(m_p, -1)]),                    # 1 / proton mass
+    Expression([(mu_0, -1)]),                   # 1 / vacuum permeability
+    Expression([(Z_0, -1)]),                    # 1 / free space impedance
+    Expression([(c, -1)]),                      # 1 / speed of light
+    Expression([(hbar, -1)]),                   # 1 / reduced Planck constant
+    Expression([(eps0, -1)]),                   # 1 / vacuum permittivity
+    Expression([(m_p, 1), (m_n, -1)]),          # m_p / m_n
+    Expression([(m_n, 1), (m_p, -1)]),          # m_n / m_p
+
+    # Composite expressions known to evaluate to ~1
+    Expression([(NA, 1), (k_B, 1), (R, -1)]),    # N_A * k_B / R
 ]
 
 def single_term_penalty(expr):
     return 1 if len(expr.terms) == 1 else 0
 
 
-def fitness(expression, *, known_exprs=None, alpha=10, beta=1, delta=5, epsilon=100, zeta=1, theta=10, eta=5):
+def fitness(expr, *, known_exprs=None, alpha=10, beta=1, delta=5, epsilon=100, zeta=1, theta=10, eta=5):
     """
     Fitness breakdown:
       + alpha: bonus for dimensionless
@@ -265,27 +285,28 @@ def fitness(expression, *, known_exprs=None, alpha=10, beta=1, delta=5, epsilon=
       - epsilon: penalize known expressions (taboo set)
       - theta: penalize 1-term expressions
     """
-    known_exprs = known_exprs or []
     f = 0
-    if expression.is_dimensionless():
+    is_dimless = expr.is_dimensionless()
+    if is_dimless:
         f += alpha
-    try:
-        value = expression.evaluate(VALUES)
-        f += eta * proximity_to_one(value)
-    except KeyError:
-        pass  # skip if some constant is missing from VALUES
-    f += beta * is_simple(expression)
-    f += zeta * term_count_bonus(expression)
-    f -= delta * trivial_structure_penalty(expression)
-    f -= theta if len(expression.terms) == 1 else 0
-    if known_identity_penalty(expression):
+        try:
+            f += eta * proximity_to_one(expr.evaluate(VALUES))
+        except KeyError:
+            pass
+
+    f += beta * is_simple(expr)
+    f += zeta * term_count_bonus(expr)
+    f -= delta * trivial_structure_penalty(expr)
+    if len(expr.terms) == 1:
+        f -= theta
+    if known_identity_penalty(expr):
         f -= epsilon
     return f
 
 
 
 
-def evolve(constants, *, known_exprs=None, generations=50, population_size=100, elite_fraction=0.2):
+def evolve(constants, *, known_exprs=None, generations=5000, population_size=100, elite_fraction=0.2):
     known_exprs = known_exprs or []
     global TABOO_SET
     TABOO_SET = set(to_expr_key(e) for e in known_exprs)
@@ -299,7 +320,7 @@ def evolve(constants, *, known_exprs=None, generations=50, population_size=100, 
         scored.sort(key=lambda x: -x[1])
 
         if not scored:
-            print(f"⚠️ Generation {gen+1} collapsed: no valid expressions.")
+            print(f"Generation {gen+1} collapsed: no valid expressions.")
             break
 
         best_expr = scored[0][0]
@@ -342,15 +363,36 @@ def evolve(constants, *, known_exprs=None, generations=50, population_size=100, 
 
 # Example Usage:
 best_expr = evolve(CONSTANTS, known_exprs=[alpha_expr, Expression([(NA, -1)])])
+best_exprs = []
+dim_less_best_exprs = []
 try:
+    best_exprs.append(best_expr)
+
     print("Best Found Expression:", best_expr.symbol)
     print("Dimension:", best_expr.dimension.vector)
     print("Is Dimensionless?", best_expr.is_dimensionless())
     if best_expr.is_dimensionless():
         print("Value:", best_expr.evaluate(VALUES))
+        dim_less_best_exprs.append(best_expr)
 except AttributeError:
-    print("⚠️ No valid expression found.")
+    print("No valid expression found.")
 val = best_expr.evaluate(VALUES)
 prox = proximity_to_one(val)
 print(f"Value: {val}")
 print(f"Proximity to 1.0: {prox:.6f}")
+print("\n\nTop expressions:")
+for expr in best_exprs:
+    try:
+        value = expr.evaluate(VALUES)
+        print(f"{expr.symbol} = {value}")
+    except Exception as e:
+        print(f"{expr.symbol} = Error: {e}")
+
+if len(dim_less_best_exprs) > 0:
+    print("Top dimensionless expressions:")
+    for expr in dim_less_best_exprs:
+        try:
+            value = expr.evaluate(VALUES)
+            print(f"{expr.symbol} = {value}")
+        except Exception as e:
+            print(f"{expr.symbol} = Error: {e}")
