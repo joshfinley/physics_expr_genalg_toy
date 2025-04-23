@@ -12,3 +12,4 @@ A couple notes on fun outcomes:
 - Once converged to 1/Λ (inverse of cosmological constant)
   - Why? I haven't checked.
 - Also once converged on N_A*k_B/R (identity of ideal gas constant)
+- m_p/m_n (ratio of the mass of a proton to the mass of a neutron)

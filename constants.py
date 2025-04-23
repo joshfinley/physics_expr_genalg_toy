@@ -1,5 +1,5 @@
 
-from dimensions import Dimension, Constant, Scalar
+from .dimensions import Dimension, Constant, Scalar
 import sympy as sp
 import math
 
